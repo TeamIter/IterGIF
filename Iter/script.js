@@ -66,12 +66,12 @@ function init() {
 	if(elements[ccid]) return;
 	active = true;
 	oBox = ne(document.body, 'div', {id: ccid});
-	ne(oBox, 'video', {src: playbackUrl, id : "playbackVideo", crossOrigin : "anonymous", controls: "controls", width : "480px", height : "280px"});
+	//ne(oBox, 'video', {src: playbackUrl, id : "playbackVideo", crossOrigin : "anonymous", controls: "controls", width : "480px", height : "280px"});
 	ne(oBox, 'img', {src: chrome.extension.getURL('images/record.png'), id: 'recordBtn', class: 'menuIcon', title: 'Record'});
 	ne(oBox, 'img', {src: chrome.extension.getURL('images/stop.png'), id: 'encodeBtn', class: 'menuIcon', title: 'Encode'});
 	addEvent(elements["recordBtn"], 'click', startCapture, "options");
 	addEvent(elements["encodeBtn"], 'click', generate, "options");
-	findVideo();
+	findVideo();	
 }
 
 function loadSettings() {
@@ -136,8 +136,9 @@ function de(element) {
 }
 
 function getVideoElements() {
-	console.log(elements["playbackVideo"]);
-	return elements["playbackVideo"];//return document.getElementsByTagName('video');
+	//console.log(elements["playbackVideo"]);
+	//return elements["playbackVideo"];
+	return document.getElementsByTagName('video');
 
 }
 
@@ -200,18 +201,19 @@ function onSeeked(e){
 }
 
 function selectVideoElement(videoElement) {
-	console.log(videoElement);
 	source    = videoElement;
 	srcWidth  = source.videoWidth;
 	srcHeight = source.videoHeight;
+
+	console.log(source);
 	
-	if(source.readyState !== 4) {
-		addEvent(source, 'canplay', videoLoaded, "videoLoad");
-		return;
-	}
+	//if(source.readyState !== 4) {
+		//addEvent(source, 'canplay', videoLoaded, "videoLoad");
+		//return;
+	//}
 	
-	addEvent(source, 'seeking', onSeeking, "seekControll");
-	addEvent(source, 'seeked', onSeeked, "seekControll");
+	//addEvent(source, 'seeking', onSeeking, "seekControll");
+	//addEvent(source, 'seeked', onSeeked, "seekControll");
 
 	try {
 		var testImage = getFrameImage(source, 0.1);
@@ -223,17 +225,44 @@ function selectVideoElement(videoElement) {
 		var CORSErr = err.code == 18 || err.name == "SecurityError";
 			
 		if(!vsrc) {
-			var re = /\ssrc=(?:(?:'([^']*)')|(?:"([^"]*)")|([^\s]*))/i, res = source.innerHTML.match(re);
-			vsrc = res[1]||res[2]||res[3];
+		//	var re = /\ssrc=(?:(?:'([^']*)')|(?:"([^"]*)")|([^\s]*))/i, res = source.innerHTML.match(re);
+		//	vsrc = res[1]||res[2]||res[3];
 		}
 		
 		console.log(err.message);
 	}
+	
+	startCapture();
 }
 
 function findVideo() {
-	var videoElements = getVideoElements();
-	selectVideoElement(videoElements);
+	//var videoElements = getVideoElements();
+	//console.log(videoElements);
+	//selectVideoElement(videoElements);
+var videoElements = getVideoElements();
+	
+	if(videoElements.length == 1) {
+		selectVideoElement(videoElements[0]);
+	} else if(videoElements.length > 1) {
+		addEvents(videoElements, videoClick);
+		setOptions('msg', getMsg('ClickVideo'));
+	} else {
+		var siteInfo = checkSite(document.location.href);
+		
+		if(siteInfo.html5Disabled) {
+			setOptions('prompt', getMsg('HTML5Disabled'), siteInfo.html5EnableAction, closeOptions);
+		} else if(siteInfo.html5Redirect) {
+			setOptions('prompt', getMsg('FlashVideo'), function() {
+				redirect(siteInfo.html5URL, true);
+			}, closeOptions);
+		} else {
+			setOptions('prompt', getMsg('NoVideo'), findVideo);
+			setOptionsButtons(getMsg('Retry'));
+			
+			getVideoEmbed();
+		}
+	}
+	
 }
 
 var cBufferMaxFrames = 30;
@@ -242,7 +271,9 @@ var framesFront = 0;
 var framesRear = 0;
 
 function startCapture(e) {
+	console.log(e);
 	if(!capturing && frameCount < cMaxFrames) {
+		//console.log(e);
 		if(source.paused) {
 			source.play();
 			source.muted = true;
@@ -256,11 +287,11 @@ function startCapture(e) {
 		}
 		
 		var delay = 1000 / cFPS;
-		var et = e.target || e.srcElement;
+		//var et = e.target || e.srcElement;
 		
 		timer = setInterval(captureFrame, delay);
 		
-		et.value = "Pause";
+		//et.value = "Pause";
 		capturing = true;
 		elements["recordBtn"].src = chrome.extension.getURL('images/recording.png');
 	} else {
@@ -279,7 +310,6 @@ function pauseCapture(maxReach) {
 function captureFrame(e) {
 	if(isQueueFull())
 		deQueue();
-
 	enQueue(getFrameImage(source));
 	console.log(frameCount);
 	
@@ -365,6 +395,8 @@ function generate() {
 	var width   = frames[0].width;
 	var height  = frames[0].height;
 	
+	pauseCapture(true);
+	
 	getNextFrame = function() {
 		if(cFrame > frames.length) {
 			// 수정해야말지 모르겠음 주의할 것
@@ -390,10 +422,12 @@ function generate() {
 }
 
 function encodingComplete(response) {
+	console.log(response);
 	localFile = response.url;
 	fileSize  = response.size;
 	sizeMB    = fileSize / 1048576;
 	ne(oBox, 'a', {href: localFile, download: 'animation', id: 'saveLink'},  'GIF 다운로드');
+	ne(oBox, 'img', {src: localFile, width: '320', height: '180'},  'GIF 다운로드');
 }
 
 function getFrameImage(video) {

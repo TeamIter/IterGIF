@@ -129,19 +129,20 @@ function saveGIF(deleteFile) {
 	
 	window.webkitRequestFileSystem(window.TEMPORARY, 1024*1024*10, function(fs) {
 		if(deleteFile == true) {
-			fs.root.getFile('animation.gif', {create: false}, function(fileEntry) {
+			fs.root.getFile('20170529test.gif', {create: false}, function(fileEntry) {
 				fileEntry.remove(function() {  });
 			}, errorHandler);
 			
 			return;
 		}
 	
-		fs.root.getFile('animation.gif', {create: true}, function(fileEntry) {
+		fs.root.getFile('20170529test.gif', {create: true}, function(fileEntry) {
 			fileEntry.createWriter(function(fileWriter) {
 				
 				fileWriter.onwriteend = function(e) {
 					frameData = [];
 					fileData = [];
+					alert(fileEntry.toURL());
 					callback({url: fileEntry.toURL(), size: fileWriter.length});
 				};
 				
@@ -182,7 +183,7 @@ chrome.runtime.onMessage.addListener(
 			
 			spawnWorkers(Math.min(4, request.frameLength));
 			
-			saveGIF(true);
+			//saveGIF(true);
 			
 			for(var i = 0; i < freeWorkers.length; i++) encodeNext();
 			
