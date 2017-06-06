@@ -131,9 +131,9 @@ function saveGIF(deleteFile) {
 	window.webkitRequestFileSystem(window.TEMPORARY, 1024*1024*10, function(fs) {
 		
 		if(deleteFile == true) {
-			fs.root.getFile('animation'+gifIndex+'.gif', {create: false}, function(fileEntry) {
-				fileEntry.remove(function() {  });
-			}, errorHandler);
+		//	fs.root.getFile('animation'+gifIndex+'.gif', {create: false}, function(fileEntry) {
+		//		fileEntry.remove(function() {  });
+		//	}, errorHandler);
 			return;
 		}
 		

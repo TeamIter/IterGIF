@@ -17,8 +17,6 @@
 
    "update_url": "https://clients2.google.com/service/update2/crx",
    "version": "1.0",
-   
-   "web_accessible_resources": [ "main.css", "script.js","images/record.png", 
-      "images/recording.png", "images/stop.png", "classes/GIFWorker.js", "images/test.gif", "animation.gif",
-      "temporary/animation.gif" ]
+   "web_accessible_resources": [ "main.css", "script.js","images/record.png","images/download.png", "images/delete.png",
+   "images/recording.png", "images/stop.png", "classes/GIFWorker.js" ]
 }

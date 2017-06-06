@@ -1,7 +1,7 @@
 #IterYoutubeGIF {
 	position: fixed;
 	width: 480px;
-	height: 320px;
+	min-height: 100px;
 	top: 10px;
 	right: 10px;
 	color: #000;
@@ -38,16 +38,58 @@
 	min-width: 20px;
 }
 
-.btnTime {
+.btnTime5 {
     background-color: #FF758F;
     padding: 3px;
     border: 1px solid #FFD6DE;
-    font-size: 10px;
+    font-size: 20px;
     color: white;
     font-weight: 600;
     cursor: pointer;
     border-radius: 3px;
     margin-right: 3px;
+    opacity: 0.5;
+    
+	position: absolute;
+  bottom: 10px;
+  left: 200px;
+}
+.btnTime10 {
+    background-color: #FF758F;
+    padding: 3px;
+    border: 1px solid #FFD6DE;
+    font-size: 20px;
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 3px;
+    margin-right: 3px;
+    opacity: 0.5;
+    
+	position: absolute;
+  bottom: 10px;
+  left: 300px;
+}
+
+.downloadBtn {
+    width: 50px;
+    hdight: 50px;
+    display:block;
+	float : right;
+	margin-right : 30px;
+}
+
+.downloadImage {
+	width : 50px;
+	height : 50px;
+	margin : 15px;
+}
+
+
+.resultBox {
+	height: 80px;
+	background-color: #EEEEEE;
+	margin : 10px;
 }
 
 #IterYoutubeGIF a:link { font-size: 15px; color: #00F; text-decoration: none; }
