@@ -63,6 +63,7 @@ var mfOptions   = ["10", "50", "100", "200", "500", "1000"];
 
 // 170529 김영덕 추가
 var framesBuff = [];
+var firstFrame = null;
 
 start();
 
@@ -70,20 +71,22 @@ function init() {
 	if(elements[ccid]) return;
 	active = true;
 	oBox = ne(document.body, 'div', {id: ccid});
-	ne(oBox, 'video', {src: playbackUrl, id : "playbackVideo", crossOrigin : "anonymous", controls: "controls", width : "480px", height : "280px"});
+	//ne(oBox, 'video', {src: playbackUrl, id : "playbackVideo", crossOrigin : "anonymous", controls: "controls", width : "480px", height : "280px"});
+	//document.getElementById("playbackVideo").setAttribute('style', 'display:none;');
 	//ne(oBox, 'img', {src: chrome.extension.getURL('images/record.png'), id: 'recordBtn', class: 'menuIcon', title: 'Record'});
 	//ne(oBox, 'img', {src: chrome.extension.getURL('images/stop.png'), id: 'encodeBtn', class: 'menuIcon', title: 'Encode'});
 	//addEvent(elements["recordBtn"], 'click', startCapture, "options");
     //addEvent(elements["encodeBtn"], 'click', generate, "options");
     //addEvent(elements["recordBtn"], 'click', generate, "options");
-    ne(oBox, 'span', { id: "btnTime5", class: "btnTime", title: "Extract 5 Seconds" }, "5 Seconds");
-    ne(oBox, 'span', { id: "btnTime10", class: "btnTime", title: "Extract 10 Seconds" }, "10 Seconds");
+    ne(oBox, 'span', { id: "btnTime5", class: "btnTime5", t5tle: "Extract 5 Seconds" }, "5 Seconds");
+    ne(oBox, 'span', { id: "btnTime10", class: "btnTime10", title: "Extract 10 Seconds" }, "10 Seconds");
     addEvent(elements["btnTime5"], 'click', generate, "options");
     addEvent(elements["btnTime10"], 'click', generate, "options");
     // 170529 김영덕 추가
-    addEvent(elements["playbackVideo"], 'play', startCapture, "options");
-    addEvent(elements["playbackVideo"], 'pause', pauseCapture, "options");
+    //addEvent(elements["playbackVideo"], 'play', startCapture, "options");
+    //addEvent(elements["playbackVideo"], 'pause', pauseCapture, "options");
 	findVideo();
+	startCapture();
 }
 
 function loadSettings() {
@@ -164,8 +167,9 @@ function de(element) {
 }
 
 function getVideoElements() {
-	console.log(elements["playbackVideo"]);
-	return elements["playbackVideo"];//return document.getElementsByTagName('video');
+	//console.log(elements["playbackVideo"]);
+	//return elements["playbackVideo"];
+	return document.getElementsByTagName('video');
 
 }
 
@@ -220,8 +224,12 @@ function videoLoaded(e) {
 function onSeeking(e) {
     //170529 김영덕 수정
 	//pauseCapture(false);
-    if (capturing)
-        pauseCapture(false);
+	console.log("onSeeking");
+    if (capturing){
+    	pauseCapture(false);
+    	startCapture();
+    }
+        
 }
 
 // 검사해서 살릴거 있으면 살리기
@@ -229,8 +237,10 @@ function onSeeking(e) {
 function onSeeked(e) {
     //170529 김영덕 수정
 	//clearQueue();
+	console.log("onSeeked");
     frameCount = 0;
     framesBuff = [];
+    startCapture();
 }
 
 function selectVideoElement(videoElement) {
@@ -238,6 +248,8 @@ function selectVideoElement(videoElement) {
 	source    = videoElement;
 	srcWidth  = source.videoWidth;
 	srcHeight = source.videoHeight;
+	
+	console.log(source);
 	
 	if(source.readyState !== 4) {
 		addEvent(source, 'canplay', videoLoaded, "videoLoad");
@@ -292,8 +304,37 @@ function applyBtnCSS() {
 }
 
 function findVideo() {
+	//var videoElements = getVideoElements();
+	//console.log(videoElements)
+	//selectVideoElement(videoElements);
+	
 	var videoElements = getVideoElements();
-	selectVideoElement(videoElements);
+	
+	console.log(videoElements);
+	
+	if(videoElements.length == 1) {
+		selectVideoElement(videoElements[0]);
+	} else if(videoElements.length > 1) {
+		addEvents(videoElements, videoClick);
+		selectVideoElement(videoElements[0]);
+		//setOptions('msg', getMsg('ClickVideo'));
+	} else {
+		var siteInfo = checkSite(document.location.href);
+		
+		if(siteInfo.html5Disabled) {
+			setOptions('prompt', getMsg('HTML5Disabled'), siteInfo.html5EnableAction, closeOptions);
+		} else if(siteInfo.html5Redirect) {
+			setOptions('prompt', getMsg('FlashVideo'), function() {
+				redirect(siteInfo.html5URL, true);
+			}, closeOptions);
+		} else {
+			setOptions('prompt', getMsg('NoVideo'), findVideo);
+			setOptionsButtons(getMsg('Retry'));
+			
+			getVideoEmbed();
+		}
+	}
+
 }
 
 var cBufferMaxFrames = 30;
@@ -318,7 +359,7 @@ function startCapture(e) {
 		}
 		
 		var delay = 1000 / cFPS;
-		var et = e.target || e.srcElement;
+		//var et = e.target || e.srcElement;
 		
         timer = setInterval(captureFrame, delay);
         // 170529 김영덕 추가: 버튼에 버퍼링 가능할시 표시되도록
@@ -459,6 +500,7 @@ function generate(e) {
 	var delay   = 1000 / cFPS;
     var width = frames[0].width;
     var height = frames[0].height;
+    firstFrame = frames[0];
 
 
 	getNextFrame = function() {
@@ -493,12 +535,30 @@ function encodingComplete(response) {
 	fileSize  = response.size;
 	sizeMB    = fileSize / 1048576;
 
-	if(gifNum > 1)
-		ce(oBox, 'a', {href: localFile, download: 'animation' + gifNum.toString(), id: 'saveLink' + gifNum.toString()},  'GIF 다운로드 ');
-	else
-		ne(oBox, 'a', {href: localFile, download: 'animation' + gifNum.toString(), id: 'saveLink' + gifNum.toString()},  'GIF 다운로드 ');
+	//if(gifNum > 1)
+		//ce(oBox, 'a', {href: localFile, download: 'animation' + gifNum.toString(), id: 'saveLink' + gifNum.toString()},  'GIF 다운로드 ');
+	//else
+	var resultBox = ne(oBox, 'div', {class: "resultBox"});
+	var downloadItem = ne(resultBox, 'a', {href: localFile, download: 'animation' + gifNum.toString(), id: 'saveLink' + gifNum.toString(), class: "downloadBtn"});
+	ne(downloadItem, 'img' , {src : chrome.extension.getURL('images/download.png'), class : "downloadImage"});
+	
+	//ne(oBox, 'canvas', {id: 'canvas1', width : "32", height : "18"});
+	//canvasBox = elements["canvas1"];
+	//ctx = canvasBox.getContext('2d');
+	//ctx.drawImage(canvas, 0, 0, 32, 18);
+	
+	ne(resultBox, 'canvas' , {id : "firstFrame" , width : "160", height : "90"});
+	var thumbnailBox = elements["firstFrame"];
+	var ctx1 = thumbnailBox.getContext('2d');
+	ctx1.drawImage(firstFrame, 0, 0, 145, 80);
 	gifNum++;
 }
+
+function hideItem(url){
+	alert(url);
+	document.getElementById(url).setAttribute('style', 'display:none;');
+}
+
 
 function getFrameImage(video) {
     var canvas = document.createElement('canvas');
