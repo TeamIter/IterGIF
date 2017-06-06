@@ -38,6 +38,18 @@
 	min-width: 20px;
 }
 
+.btnTime {
+    background-color: #FF758F;
+    padding: 3px;
+    border: 1px solid #FFD6DE;
+    font-size: 10px;
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 3px;
+    margin-right: 3px;
+}
+
 #IterYoutubeGIF a:link { font-size: 15px; color: #00F; text-decoration: none; }
 #IterYoutubeGIF a:visited { font-size: 15px; color: #00F; text-decoration: none; }
 #IterYoutubeGIF a:hover { text-decoration: underline; }

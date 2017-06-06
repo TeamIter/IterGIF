@@ -6,16 +6,17 @@ var source     = null;
 var elements   = {};
 var events     = [];
 var frames     = [];
+var framesBuffer = [];
 var embeds     = {};
 var image      = null;
 var timer      = null;
-var btnTimer   = null;  // 170529 김영덕 추가
 var viewTimer  = null;
 var cFrame     = 0;
 var capturing  = false;
 var playing    = false;
 var settOpen   = false;
 var frameCount = 0;
+var frameBufferCount = 0;
 var vScale     = 1;
 var cfWidth    = 320, cfHeight = 240;
 var localFile  = "";
@@ -26,9 +27,11 @@ var cbX        = 0, cbY = 0, cbW = 200, cbH = 150;
 var cropX      = 0, cropY = 0;
 var srcWidth   = 0, srcHeight = 0;
 var getNextFrame;
+var getNextFrameBuffer;
 
 var cQuality     = "Medium";
 var cFPS         = 10;
+// 녹화 가능한 최대 프레임 수
 var cMaxFrames   = 500;
 var cSize        = 320;
 var injectButton = true;
@@ -61,9 +64,6 @@ var sizeOptions = ["50", "100", "150", "256", "320", "448"];
 var fpsOptions  = ["1", "5", "7.5", "10", "15", "20", "30"];
 var mfOptions   = ["10", "50", "100", "200", "500", "1000"];
 
-// 170529 김영덕 추가
-var framesBuff = [];
-
 start();
 
 function init() {
@@ -71,18 +71,12 @@ function init() {
 	active = true;
 	oBox = ne(document.body, 'div', {id: ccid});
 	ne(oBox, 'video', {src: playbackUrl, id : "playbackVideo", crossOrigin : "anonymous", controls: "controls", width : "480px", height : "280px"});
-	//ne(oBox, 'img', {src: chrome.extension.getURL('images/record.png'), id: 'recordBtn', class: 'menuIcon', title: 'Record'});
-	//ne(oBox, 'img', {src: chrome.extension.getURL('images/stop.png'), id: 'encodeBtn', class: 'menuIcon', title: 'Encode'});
-	//addEvent(elements["recordBtn"], 'click', startCapture, "options");
-    //addEvent(elements["encodeBtn"], 'click', generate, "options");
-    //addEvent(elements["recordBtn"], 'click', generate, "options");
-    ne(oBox, 'span', { id: "btnTime5", class: "btnTime", title: "Extract 5 Seconds" }, "5 Seconds");
-    ne(oBox, 'span', { id: "btnTime10", class: "btnTime", title: "Extract 10 Seconds" }, "10 Seconds");
-    addEvent(elements["btnTime5"], 'click', generate, "options");
-    addEvent(elements["btnTime10"], 'click', generate, "options");
-    // 170529 김영덕 추가
-    addEvent(elements["playbackVideo"], 'play', startCapture, "options");
-    addEvent(elements["playbackVideo"], 'pause', pauseCapture, "options");
+	ne(oBox, 'img', {src: chrome.extension.getURL('images/record.png'), id: 'recordBtn', class: 'menuIcon', title: 'Record'});
+	ne(oBox, 'img', {src: chrome.extension.getURL('images/stop.png'), id: 'encodeBtn', class: 'menuIcon', title: 'Encode'});
+	ne(oBox, 'img', {src: chrome.extension.getURL('images/stop.png'), id: 'encodeBufferBtn', class: 'menuIcon', title: 'Encode'});
+	addEvent(elements["recordBtn"], 'click', startCapture, "options");
+	addEvent(elements["encodeBtn"], 'click', generate, "options");
+	addEvent(elements["encodeBufferBtn"], 'click', generateFromBuffer, "options");
 	findVideo();
 }
 
@@ -132,22 +126,6 @@ function removeEvents(eventGroup) {
 function ne(parent, element, attr, intxt) {
 	var el = document.createElement(element);
 	
-	for(var key in attr) {
-		el.setAttribute(key, attr[key]);
-	}
-	if(intxt)  el.textContent = intxt;
-	if('id' in attr) elements[attr['id']] = el;
-	if(parent) parent.appendChild(el);
-	
-	return el;
-}
-
-function ce(parent, element, attr, intxt){
-	if(document.getElementById(attr['id']) ==null)
-		return;
-
-	var el = document.getElementById(attr['id']);
-
 	for(var key in attr) {
 		el.setAttribute(key, attr[key]);
 	}
@@ -217,20 +195,14 @@ function videoLoaded(e) {
 	selectVideoElement(et);
 }
 
-function onSeeking(e) {
-    //170529 김영덕 수정
-	//pauseCapture(false);
-    if (capturing)
-        pauseCapture(false);
+function onSeeking(e){
+	pauseCapture(false);
 }
 
 // 검사해서 살릴거 있으면 살리기
 // 자동으로 큐를 비워버렸는데 꼭 그럴필요가 없을 수도
-function onSeeked(e) {
-    //170529 김영덕 수정
-	//clearQueue();
-    frameCount = 0;
-    framesBuff = [];
+function onSeeked(e){
+	clearQueue();
 }
 
 function selectVideoElement(videoElement) {
@@ -246,6 +218,10 @@ function selectVideoElement(videoElement) {
 	
 	addEvent(source, 'seeking', onSeeking, "seekControll");
 	addEvent(source, 'seeked', onSeeked, "seekControll");
+
+	// 수정한 부분
+	// 버퍼를 쌓기 시작함
+	startCaptureBuffer();
 
 	try {
 		var testImage = getFrameImage(source, 0.1);
@@ -265,32 +241,6 @@ function selectVideoElement(videoElement) {
 	}
 }
 
-// 170529 김영덕 추가
-function applyBtnCSS() {
-    var buffLen = framesBuff.length;
-    var btn5 = document.getElementById("btnTime5");
-    var btn10 = document.getElementById("btnTime10");
-    if (buffLen >= (cFPS * 10)) {
-        btn5.style["backgroundColor"] = "#00CE00";
-        btn5.style["border"] = "1px solid #00EB00";
-        btn10.style["backgroundColor"] = "#00CE00";
-        btn10.style["border"] = "1px solid #00EB00";
-        clearInterval(btnTimer);
-    } else if (buffLen < (cFPS * 10)) {
-        if (buffLen < (cFPS * 5)) {
-            btn5.style["backgroundColor"] = "#FF758F";
-            btn5.style["border"] = "1px solid #FFD6DE";
-            btn10.style["backgroundColor"] = "#FF758F";
-            btn10.style["border"] = "1px solid #FFD6DE";
-        } else {
-            btn5.style["backgroundColor"] = "#00CE00";
-            btn5.style["border"] = "1px solid #00EB00";
-            btn10.style["backgroundColor"] = "#FF758F";
-            btn10.style["border"] = "1px solid #FFD6DE";
-        }
-    }
-}
-
 function findVideo() {
 	var videoElements = getVideoElements();
 	selectVideoElement(videoElements);
@@ -302,9 +252,7 @@ var framesFront = 0;
 var framesRear = 0;
 
 function startCapture(e) {
-    // 170529 김영덕 수정
-	//if(!capturing && frameCount < cMaxFrames) {
-    if (!capturing) {
+	if(!capturing && frameCount < cMaxFrames) {
 		if(source.paused) {
 			source.play();
 			source.muted = true;
@@ -320,47 +268,45 @@ function startCapture(e) {
 		var delay = 1000 / cFPS;
 		var et = e.target || e.srcElement;
 		
-        timer = setInterval(captureFrame, delay);
-        // 170529 김영덕 추가: 버튼에 버퍼링 가능할시 표시되도록
-        btnTimer = setInterval(applyBtnCSS, 500);
-
-        // 김영덕 주석처리
-		//et.value = "Pause";
+		timer = setInterval(captureFrame, delay);
+		
+		et.value = "Pause";
 		capturing = true;
-		//elements["recordBtn"].src = chrome.extension.getURL('images/recording.png');
-    }
-    //else {
-	//	if(!source.paused) source.pause();
-	//	pauseCapture(frameCount >= cMaxFrames);
-	//}
+		elements["recordBtn"].src = chrome.extension.getURL('images/recording.png');
+	} else {
+		if(!source.paused) source.pause();
+		pauseCapture(frameCount >= cMaxFrames);
+	}
 }
 
 function pauseCapture(maxReach) {
 	capturing = false;
-    clearInterval(timer);
-    // 170529 김영덕: btnTimer추가
-    clearInterval(btnTimer);
-    // 170529 김영덕 주석처리
-	//elements["recordBtn"].value = "Start";
-	//elements["recordBtn"].src = chrome.extension.getURL('images/record.png');
+	clearInterval(timer);
+	elements["recordBtn"].value = "Start";
+	elements["recordBtn"].src = chrome.extension.getURL('images/record.png');
 }
+
 
 function captureFrame(e) {
-    // 170529 김영덕 주석처리 및 코드 추가
-	//if(isQueueFull())
-	//	deQueue();
 
-	//enQueue(getFrameImage(source));
-	//console.log(frameCount);
-	
-	//if(frameCount >= cMaxFrames) pauseCapture(true);
-
-    frameCount++;
-    if (frameCount >= cMaxFrames)
-        framesBuff.shift(); // 버퍼의 맨앞의 요소 제거
-    framesBuff.push(getFrameImage(source)); // 버퍼의 맨뒤에 요소 추가
-    //console.log(frameCount);
+	console.log(frameCount);
+	frames[frameCount++] = getFrameImage(source);
+	if(frameCount >= cMaxFrames) pauseCapture(true);
 }
+
+
+function startCaptureBuffer(){
+	timerBuffer = setInterval(captureFrameBuffer, 1000 / cFPS);
+}
+
+function captureFrameBuffer(e){
+	if(isQueueFull())
+		deQueue();
+
+	enQueue(getFrameImage(source));
+	console.log(frameBufferCount);
+}
+
 
 function isQueueFull(){
 	if(((framesRear+1)%cQueueSize) == framesFront)
@@ -378,8 +324,8 @@ function enQueue(frameImage){
 	if(isQueueFull())
 		return;
 
-	frameCount++;
-	frames[framesRear] = frameImage;
+	frameBufferCount++;
+	framesBuffer[framesRear] = frameImage;
 	framesRear = (framesRear+1)%cQueueSize;
 }
 
@@ -387,14 +333,14 @@ function deQueue(){
 	if(isQueueEmpty())
 		return;
 
-	frameCount--;
-	var frame = frames[framesFront];
+	frameBufferCount--;
+	var frame = framesBuffer[framesFront];
 	framesFront = (framesFront+1)%cQueueSize;
 	return frame;
 }
 
 function clearQueue(){
-	return deQueueFor(frameCount);
+	return deQueueFor(frameBufferCount);
 }
 
 // javascript는 함수 오버로딩이 없단다...
@@ -409,19 +355,9 @@ function deQueueFor(num){
 	// for(var i = 0; i < num; i++)
 	// 	DeQueue();
 
-	frameCount -= num;
+	frameBufferCount -= num;
 	framesFront = framesFrontDesti;
 	return true;
-}
-
-// 이 함수를 사용하지 못하고 있는데
-// 사용할 수 있도록 고치면 좋을 거 같다
-function getFrame(i){
-	var index = (framesFront+i)%cQueueSize;
-	if(index > framesRear)
-		return null;
-
-	return frames[index];
 }
 
 function stopCapture(e) {
@@ -433,42 +369,25 @@ function stopCapture(e) {
 	}
 }
 
-function generate(e) {
 
-    // 170529 김영덕 추가 : 버퍼의 내용을 frames배열로 복사
-    frames = framesBuff;
-    frames = frames.slice(0);
+function stopCaptureBuffer(){
+	clearInterval(timerBuffer);
+}
 
-    var seconds;
-    if (e.target.id == "btnTime5") {
-        seconds = 5;
-    } else {
-        seconds = 10;
-    }
+function generate() {
 
-    console.log("generate Start. cFPS is " + cFPS);
-    // 170529 김영덕 추가 : framesFront 계산 (어디서부터 추출할것인지)
-    if (frames.length >= (cFPS * seconds))
-        framesFront = frames.length - (cFPS * seconds);
-    console.log(frames.length);
-    console.log(framesFront);
-    frames = frames.slice(framesFront); // 이렇게하면 무조건 0번부터 끝까지 쭉 추출하면됨
-    framesRear = frames.length - 1;
 	var cFrame  = 0;
 	var quality = getQuality();
 	var delay   = 1000 / cFPS;
-    var width = frames[0].width;
-    var height = frames[0].height;
-
-
+	var width   = frames[0].width;
+	var height  = frames[0].height;
+	
 	getNextFrame = function() {
 		if(cFrame > frames.length) {
 			// 수정해야말지 모르겠음 주의할 것
 			return {canEncode: false};
 		} 
-        console.log("generate : " + cFrame + "/" + (frames.length-1));
-        // 170529 김영덕 주석처리
-		//cFrame = cFrame%cQueueSize;
+		console.log("generate");
 		return {
 			canEncode: true, 
 			frame: cFrame, 
@@ -478,26 +397,52 @@ function generate(e) {
 			quality: quality, 
 			delay: delay, 
 			imageData: frames[cFrame++].getContext('2d').getImageData(0, 0, width, height).data,
-            // 이 조건이 맞으면 탈출
-            last: (cFrame == framesRear)
+			// 이 조건이 맞으면 탈출
+			last: (cFrame == frameCount)
 		}
 	}
 	
 	chrome.runtime.sendMessage({command: "startEncoding", frameLength: frames.length}, encodingComplete);
 }
 
-var gifNum = 1;
+function generateFromBuffer() {
+
+	var cFrame  = framesFront;
+	var quality = getQuality();
+	var delay   = 1000 / cFPS;
+	var width   = framesBuffer[cFrame].width;
+	var height  = framesBuffer[cFrame].height;
+
+	stopCaptureBuffer();
+	
+	getNextFrame = function() {
+		console.log("generate");
+		console.log(cFrame);
+		cFrame = cFrame%cQueueSize;
+		return {
+			canEncode: true, 
+			frame: cFrame, 
+			frameLength: framesBuffer.length, 
+			width: width, 
+			height: height, 
+			quality: quality, 
+			delay: delay, 
+			imageData: framesBuffer[cFrame++].getContext('2d').getImageData(0, 0, width, height).data,
+			// 이 조건이 맞으면 탈출
+			last: (cFrame == framesRear)
+		}
+	}
+	
+	console.log(framesBuffer.length);
+	chrome.runtime.sendMessage({command: "startEncoding", frameLength: framesBuffer.length}, encodingComplete);
+}
+
 function encodingComplete(response) {
-    console.log("size : " + response.size);
 	localFile = response.url;
 	fileSize  = response.size;
 	sizeMB    = fileSize / 1048576;
+	ne(oBox, 'a', {href: localFile, download: 'animation', id: 'saveLink'},  'GIF 다운로드');
 
-	if(gifNum > 1)
-		ce(oBox, 'a', {href: localFile, download: 'animation' + gifNum.toString(), id: 'saveLink' + gifNum.toString()},  'GIF 다운로드 ');
-	else
-		ne(oBox, 'a', {href: localFile, download: 'animation' + gifNum.toString(), id: 'saveLink' + gifNum.toString()},  'GIF 다운로드 ');
-	gifNum++;
 }
 
 function getFrameImage(video) {
