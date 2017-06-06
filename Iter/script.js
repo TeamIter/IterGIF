@@ -166,7 +166,6 @@ function de(element) {
 function getVideoElements() {
 	console.log(elements["playbackVideo"]);
 	return elements["playbackVideo"];//return document.getElementsByTagName('video');
-
 }
 
 function getVideoEmbed(ec) {
@@ -224,11 +223,7 @@ function onSeeking(e) {
         pauseCapture(false);
 }
 
-// 검사해서 살릴거 있으면 살리기
-// 자동으로 큐를 비워버렸는데 꼭 그럴필요가 없을 수도
 function onSeeked(e) {
-    //170529 김영덕 수정
-	//clearQueue();
     frameCount = 0;
     framesBuff = [];
 }
@@ -297,7 +292,6 @@ function findVideo() {
 }
 
 var cBufferMaxFrames = 30;
-var cQueueSize = cBufferMaxFrames + 1;
 var framesFront = 0;
 var framesRear = 0;
 
@@ -347,81 +341,10 @@ function pauseCapture(maxReach) {
 
 function captureFrame(e) {
     // 170529 김영덕 주석처리 및 코드 추가
-	//if(isQueueFull())
-	//	deQueue();
-
-	//enQueue(getFrameImage(source));
-	//console.log(frameCount);
-	
-	//if(frameCount >= cMaxFrames) pauseCapture(true);
-
     frameCount++;
     if (frameCount >= cMaxFrames)
         framesBuff.shift(); // 버퍼의 맨앞의 요소 제거
     framesBuff.push(getFrameImage(source)); // 버퍼의 맨뒤에 요소 추가
-    //console.log(frameCount);
-}
-
-function isQueueFull(){
-	if(((framesRear+1)%cQueueSize) == framesFront)
-		return true;
-	return false;
-}
-
-function isQueueEmpty(){
-	if(framesRear == framesFront)
-		return true;
-	return false;
-}
-
-function enQueue(frameImage){
-	if(isQueueFull())
-		return;
-
-	frameCount++;
-	frames[framesRear] = frameImage;
-	framesRear = (framesRear+1)%cQueueSize;
-}
-
-function deQueue(){
-	if(isQueueEmpty())
-		return;
-
-	frameCount--;
-	var frame = frames[framesFront];
-	framesFront = (framesFront+1)%cQueueSize;
-	return frame;
-}
-
-function clearQueue(){
-	return deQueueFor(frameCount);
-}
-
-// javascript는 함수 오버로딩이 없단다...
-// arguments 변수의 length 같은걸로 구분하란다...
-function deQueueFor(num){
-	// 성능을 생각한 방법
-	var framesFrontDesti = (framesFront+num)%cQueueSize;
-	if(framesFrontDesti > framesRear)
-		return false;
-
-	// 성능은 별로지만 확실한 방법, 유지보수 좋음
-	// for(var i = 0; i < num; i++)
-	// 	DeQueue();
-
-	frameCount -= num;
-	framesFront = framesFrontDesti;
-	return true;
-}
-
-// 이 함수를 사용하지 못하고 있는데
-// 사용할 수 있도록 고치면 좋을 거 같다
-function getFrame(i){
-	var index = (framesFront+i)%cQueueSize;
-	if(index > framesRear)
-		return null;
-
-	return frames[index];
 }
 
 function stopCapture(e) {
@@ -432,6 +355,10 @@ function stopCapture(e) {
 		if(frames.length > 0) playPreview(e, true, false);
 	}
 }
+
+var framesForGIF = new Array();
+var gifFramesCounter = new Array();
+var gifNum = 0;
 
 function generate(e) {
 
@@ -446,12 +373,14 @@ function generate(e) {
         seconds = 10;
     }
 
+    framesForGIF[gifNum] = new Array();
+    framesForGIF[gifNum] = frames.slice(frames.length - (cFPS*seconds));
+    gifFramesCounter[gifNum] = 0;
+
     console.log("generate Start. cFPS is " + cFPS);
     // 170529 김영덕 추가 : framesFront 계산 (어디서부터 추출할것인지)
     if (frames.length >= (cFPS * seconds))
         framesFront = frames.length - (cFPS * seconds);
-    console.log(frames.length);
-    console.log(framesFront);
     frames = frames.slice(framesFront); // 이렇게하면 무조건 0번부터 끝까지 쭉 추출하면됨
     framesRear = frames.length - 1;
 	var cFrame  = 0;
@@ -460,15 +389,12 @@ function generate(e) {
     var width = frames[0].width;
     var height = frames[0].height;
 
-
 	getNextFrame = function() {
 		if(cFrame > frames.length) {
-			// 수정해야말지 모르겠음 주의할 것
 			return {canEncode: false};
 		} 
         console.log("generate : " + cFrame + "/" + (frames.length-1));
         // 170529 김영덕 주석처리
-		//cFrame = cFrame%cQueueSize;
 		return {
 			canEncode: true, 
 			frame: cFrame, 
@@ -486,18 +412,35 @@ function generate(e) {
 	chrome.runtime.sendMessage({command: "startEncoding", frameLength: frames.length}, encodingComplete);
 }
 
-var gifNum = 1;
+var showFramesTimer = new Array;
+var imgDiv = new Array();
 function encodingComplete(response) {
     console.log("size : " + response.size);
 	localFile = response.url;
 	fileSize  = response.size;
 	sizeMB    = fileSize / 1048576;
 
-	if(gifNum > 1)
-		ce(oBox, 'a', {href: localFile, download: 'animation' + gifNum.toString(), id: 'saveLink' + gifNum.toString()},  'GIF 다운로드 ');
-	else
-		ne(oBox, 'a', {href: localFile, download: 'animation' + gifNum.toString(), id: 'saveLink' + gifNum.toString()},  'GIF 다운로드 ');
+	// 현재 gif index
+	var nowGif = gifNum;
+	// 첫번째 프레임을 따와서
+	imgDiv[nowGif] = ne(oBox, 'div', {id: "imgDiv" + nowGif});
+	var imageSrc = framesForGIF[gifNum][0].toDataURL("image/png");
+	// img 태그 생성
+	ne(imgDiv[nowGif], 'img', {src:imageSrc, id:'framesImg' + nowGif});
+	// interval 시작
+	showFramesTimer[nowGif] = setInterval(function(){
+		showFrames(null, nowGif);
+	}, 100);
+	// a 태그 생성
+	ne(imgDiv[nowGif], 'a', {href: localFile, download: 'animation' + nowGif.toString(), id: 'saveLink' + nowGif.toString()},  'GIF 다운로드 ');
 	gifNum++;
+}
+
+function showFrames(e, gifIndex){
+	var imageSrc = framesForGIF[gifIndex][gifFramesCounter[gifIndex]++].toDataURL("image/png");
+	ce(imgDiv[gifIndex], 'img', {src:imageSrc, id:'framesImg' + gifIndex});
+	if(gifFramesCounter[gifIndex] == framesForGIF[gifIndex].length - 1)
+		gifFramesCounter[gifIndex] = 1;
 }
 
 function getFrameImage(video) {
@@ -517,7 +460,6 @@ function getFrameImage(video) {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-          
 function start() {
   var pagecontainer=document.getElementById('page-container');
   if (!pagecontainer) return;
