@@ -4,7 +4,8 @@ var frameData   = [];
 var fileData    = [];
 var lastSent    = false;
 var encTab;
-var gifIndex=0;
+var gifIndex = 0;
+var outputName = null; // 2017.06.07 ±è¿µ´ö Ãß°¡
 
 function loadOptions(tabId, targetSrc) {
 	chrome.tabs.executeScript(tabId, {code:"(typeof active !== 'undefined')"}, function(response) {
@@ -137,8 +138,10 @@ function saveGIF(deleteFile) {
 			return;
 		}
 		
-		gifIndex++;
-		fs.root.getFile('animation'+gifIndex+'.gif', {create: true}, function(fileEntry) {
+        gifIndex++;
+        // 2017.06.07 ±è¿µ´ö ¼öÁ¤
+		//fs.root.getFile('animation'+gifIndex+'.gif', {create: true}, function(fileEntry) {
+        fs.root.getFile(outputName + gifIndex + '.gif', { create: true }, function (fileEntry) {
 			fileEntry.createWriter(function(fileWriter) {
 				
 				fileWriter.onwriteend = function(e) {
@@ -183,7 +186,9 @@ chrome.runtime.onMessage.addListener(
 
 			console.log("start");
 			spawnWorkers(Math.min(4, request.frameLength));
-			
+
+            // 2017.06.07 ±è¿µ´ö Ãß°¡
+            outputName = request.outputName;
 			saveGIF(true);
 			
 			for(var i = 0; i < freeWorkers.length; i++) encodeNext();
